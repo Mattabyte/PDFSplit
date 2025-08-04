@@ -5,7 +5,7 @@ import { useState, useRef } from 'react'
 interface SplitFile {
   page: number
   filename: string
-  data: string
+  downloadUrl: string
   size: number
 }
 
@@ -13,6 +13,7 @@ interface SplitResult {
   success: boolean
   totalPages: number
   files: SplitFile[]
+  sessionId?: string
   error?: string
   details?: string
 }
@@ -99,16 +100,17 @@ export default function TestPDFSplit() {
     }
   }
 
-  const downloadFile = (base64Data: string, filename: string) => {
+  const downloadFile = (downloadUrl: string, filename: string) => {
     const link = document.createElement('a')
-    link.href = `data:application/pdf;base64,${base64Data}`
+    link.href = downloadUrl
     link.download = filename
+    link.target = '_blank'
     link.click()
   }
 
   const downloadAll = (files: SplitFile[]) => {
     files.forEach((file, index) => {
-      setTimeout(() => downloadFile(file.data, file.filename), index * 100)
+      setTimeout(() => downloadFile(file.downloadUrl, file.filename), index * 100)
     })
   }
 
@@ -203,7 +205,7 @@ export default function TestPDFSplit() {
                       <p className="text-gray-600">Size: {(file.size / 1024).toFixed(2)} KB</p>
                     </div>
                     <button
-                      onClick={() => downloadFile(file.data, file.filename)}
+                      onClick={() => downloadFile(file.downloadUrl, file.filename)}
                       className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 transition-colors"
                     >
                       Download

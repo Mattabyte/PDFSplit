@@ -86,9 +86,12 @@ exports.handler = async (event, context) => {
     const pdfDoc = await PDFDocument.load(pdfBuffer);
     const pageCount = pdfDoc.getPageCount();
 
+    // Generate a session ID for this split operation
+    const sessionId = Date.now().toString() + Math.random().toString(36).substr(2, 9);
+    
     const splitPdfs = [];
 
-    // Split the PDF into individual pages
+    // Split the PDF into individual pages and return metadata only
     for (let i = 0; i < pageCount; i++) {
       // Create a new PDF document
       const newPdfDoc = await PDFDocument.create();
@@ -100,16 +103,31 @@ exports.handler = async (event, context) => {
       // Serialize the PDF
       const pdfBytes = await newPdfDoc.save();
       
-      // Convert to base64 for response
-      const base64Pdf = Buffer.from(pdfBytes).toString('base64');
+      // Store pages in global variable for this session (temporary solution)
+      if (!global.pdfSessions) {
+        global.pdfSessions = {};
+      }
+      if (!global.pdfSessions[sessionId]) {
+        global.pdfSessions[sessionId] = {};
+      }
       
+      global.pdfSessions[sessionId][i] = pdfBytes;
+      
+      // Return metadata with download URL instead of data
       splitPdfs.push({
         page: i + 1,
         filename: `page_${i + 1}.pdf`,
-        data: base64Pdf,
+        downloadUrl: `/.netlify/functions/download-page?session=${sessionId}&page=${i}`,
         size: pdfBytes.length
       });
     }
+
+    // Clean up session after 10 minutes
+    setTimeout(() => {
+      if (global.pdfSessions && global.pdfSessions[sessionId]) {
+        delete global.pdfSessions[sessionId];
+      }
+    }, 10 * 60 * 1000);
 
     return {
       statusCode: 200,
@@ -120,7 +138,8 @@ exports.handler = async (event, context) => {
       body: JSON.stringify({
         success: true,
         totalPages: pageCount,
-        files: splitPdfs
+        files: splitPdfs,
+        sessionId: sessionId
       }),
     };
 
