@@ -50,15 +50,13 @@ export default function TestPDFSplit() {
     }
   }
 
-  const fileToBase64 = (file: File): Promise<string> => {
+  const fileToArrayBuffer = (file: File): Promise<ArrayBuffer> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader()
-      reader.readAsDataURL(file)
+      reader.readAsArrayBuffer(file)
       reader.onload = () => {
-        if (typeof reader.result === 'string') {
-          // Remove the data:application/pdf;base64, prefix
-          const base64 = reader.result.split(',')[1]
-          resolve(base64)
+        if (reader.result instanceof ArrayBuffer) {
+          resolve(reader.result)
         } else {
           reject(new Error('Failed to read file'))
         }
@@ -74,16 +72,16 @@ export default function TestPDFSplit() {
     setResult(null)
 
     try {
-      // Convert file to base64
-      const base64 = await fileToBase64(selectedFile)
+      // Convert file to ArrayBuffer for efficient binary transfer
+      const arrayBuffer = await fileToArrayBuffer(selectedFile)
 
-      // Call the Netlify function
+      // Call the Netlify function with binary data
       const response = await fetch('/.netlify/functions/split-pdf', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/pdf',
         },
-        body: JSON.stringify({ pdf: base64 })
+        body: arrayBuffer
       })
 
       const data: SplitResult = await response.json()
@@ -125,7 +123,7 @@ export default function TestPDFSplit() {
   return (
     <div className="max-w-4xl mx-auto p-6 font-sans">
       <h1 className="text-3xl font-bold mb-4">PDF Split Function Test</h1>
-      <p className="mb-6 text-gray-600">Upload a PDF file to split it into individual pages.</p>
+      <p className="mb-6 text-gray-600">Upload a PDF file to split it into individual pages. Optimized for efficient binary transfer (max 6MB).</p>
       
       <div 
         className={`border-2 border-dashed rounded-lg p-10 text-center mb-4 transition-colors cursor-pointer ${
@@ -139,7 +137,13 @@ export default function TestPDFSplit() {
         onClick={() => fileInputRef.current?.click()}
       >
         {selectedFile ? (
-          <p className="text-green-600">Selected: {selectedFile.name}</p>
+          <div className="text-green-600">
+            <p>Selected: {selectedFile.name}</p>
+            <p className="text-sm">Size: {(selectedFile.size / 1024).toFixed(2)} KB</p>
+            {selectedFile.size > 6 * 1024 * 1024 && (
+              <p className="text-red-500 text-sm">Warning: File exceeds 6MB limit</p>
+            )}
+          </div>
         ) : (
           <>
             <p className="mb-4">Drag and drop a PDF file here, or click to select</p>

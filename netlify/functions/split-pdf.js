@@ -27,23 +27,33 @@ exports.handler = async (event, context) => {
   }
 
   try {
-    // Parse the request body - expect base64 encoded PDF
+    // Parse the request body - now optimized to handle binary data efficiently
     let pdfBuffer;
     
     if (event.isBase64Encoded) {
-      // If the PDF is already base64 encoded
+      // If the PDF is already base64 encoded (fallback for older clients)
       pdfBuffer = Buffer.from(event.body, 'base64');
     } else {
-      // Try to parse as JSON first (for base64 in JSON)
-      try {
-        const parsedBody = JSON.parse(event.body);
-        if (parsedBody.pdf) {
-          pdfBuffer = Buffer.from(parsedBody.pdf, 'base64');
-        } else {
-          throw new Error('No PDF data found in JSON body');
+      // Check content type to determine how to handle the body
+      const contentType = event.headers['content-type'] || event.headers['Content-Type'] || '';
+      
+      if (contentType.includes('application/pdf')) {
+        // Handle binary PDF data directly (most efficient)
+        pdfBuffer = Buffer.from(event.body, 'binary');
+      } else if (contentType.includes('application/json')) {
+        // Handle JSON with base64 data (legacy fallback)
+        try {
+          const parsedBody = JSON.parse(event.body);
+          if (parsedBody.pdf) {
+            pdfBuffer = Buffer.from(parsedBody.pdf, 'base64');
+          } else {
+            throw new Error('No PDF data found in JSON body');
+          }
+        } catch (jsonError) {
+          throw new Error('Invalid JSON format: ' + jsonError.message);
         }
-      } catch (jsonError) {
-        // If JSON parsing fails, assume the body is the raw PDF data
+      } else {
+        // Default to binary data
         pdfBuffer = Buffer.from(event.body, 'binary');
       }
     }
@@ -53,6 +63,22 @@ exports.handler = async (event, context) => {
         statusCode: 400,
         headers,
         body: JSON.stringify({ error: 'No PDF data provided' }),
+      };
+    }
+
+    // Log file size for debugging
+    console.log(`Processing PDF file of size: ${pdfBuffer.length} bytes (${(pdfBuffer.length / 1024).toFixed(2)} KB)`);
+
+    // Check if file is too large (Netlify has a 6MB limit)
+    const maxSize = 6 * 1024 * 1024; // 6MB
+    if (pdfBuffer.length > maxSize) {
+      return {
+        statusCode: 413,
+        headers,
+        body: JSON.stringify({ 
+          error: 'PDF file too large', 
+          details: `File size ${(pdfBuffer.length / 1024 / 1024).toFixed(2)}MB exceeds maximum allowed size of 6MB` 
+        }),
       };
     }
 

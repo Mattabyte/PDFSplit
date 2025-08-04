@@ -5,3 +5,6 @@
 
 [functions]
   node_bundler = "esbuild"
+
+[functions."split-pdf"]
+  timeout = 30
